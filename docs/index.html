@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitHub OAuth con Next.js y Strapi</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.6.1/dist/reset.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.6.1/dist/reveal.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.6.1/dist/theme/night.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.6.1/plugin/highlight/monokai.css">
+    <style>
+        .reveal h1, .reveal h2, .reveal h3 { text-transform: none; }
+        .reveal pre { width: 100%; font-size: 0.55em; }
+        .reveal code { font-family: 'Fira Code', monospace; }
+        .reveal .slides section { text-align: left; }
+        .reveal .slides section.center { text-align: center; }
+        .reveal ul { font-size: 0.85em; }
+        .reveal .highlight { color: #42affa; }
+        .reveal .small { font-size: 0.7em; }
+        .architecture-box { 
+            background: rgba(66, 175, 250, 0.1); 
+            border: 1px solid #42affa; 
+            padding: 20px; 
+            border-radius: 8px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="reveal">
+        <div class="slides">
+            <!-- Título -->
+            <section class="center">
+                <h1>🔐 GitHub OAuth</h1>
+                <h3>Next.js + Strapi</h3>
+                <p class="small">Autenticación social moderna paso a paso</p>
+            </section>
+
+            <!-- Agenda -->
+            <section>
+                <h2>📋 Agenda</h2>
+                <ul>
+                    <li>¿Por qué OAuth?</li>
+                    <li>Flujo de autenticación</li>
+                    <li>Arquitectura del proyecto</li>
+                    <li>Implementación paso a paso</li>
+                    <li>Seguridad y mejores prácticas</li>
+                </ul>
+            </section>
+
+            <!-- Por qué OAuth -->
+            <section>
+                <h2>🤔 ¿Por qué OAuth?</h2>
+                <ul>
+                    <li>Los usuarios <span class="highlight">odian crear cuentas</span></li>
+                    <li>Menos fricción = más conversiones</li>
+                    <li>GitHub = identidad de desarrolladores</li>
+                    <li>Delegamos la seguridad al experto</li>
+                </ul>
+            </section>
+
+            <!-- OAuth vs Auth -->
+            <section>
+                <h2>🔑 OAuth ≠ Autenticación</h2>
+                <p><strong>OAuth 2.0</strong> es un protocolo de <span class="highlight">autorización</span></p>
+                <ul>
+                    <li><strong>Autenticación:</strong> ¿Quién eres?</li>
+                    <li><strong>Autorización:</strong> ¿Qué puedes hacer?</li>
+                </ul>
+                <p class="small">Usamos la autorización para obtener datos y autenticar</p>
+            </section>
+
+            <!-- Arquitectura -->
+            <section>
+                <h2>🏗️ Arquitectura</h2>
+                <div class="architecture-box">
+                    <p>Next.js (3000) → Strapi (1337) → GitHub</p>
+                </div>
+                <br>
+                <ul>
+                    <li><strong>Frontend:</strong> UI + Route Handler</li>
+                    <li><strong>Backend:</strong> Strapi gestiona OAuth</li>
+                    <li><strong>Provider:</strong> GitHub OAuth App</li>
+                </ul>
+            </section>
+
+            <!-- Flujo completo -->
+            <section>
+                <h2>🔄 Flujo de Auth</h2>
+                <ol class="small">
+                    <li>Usuario click → "Sign in with GitHub"</li>
+                    <li>Redirect → Strapi <code>/api/connect/github</code></li>
+                    <li>Strapi → GitHub login page</li>
+                    <li>GitHub → Strapi con código</li>
+                    <li>Strapi intercambia código por token</li>
+                    <li>Strapi → Frontend con access_token</li>
+                    <li>Frontend → Strapi pide JWT</li>
+                    <li>JWT guardado en cookie HttpOnly</li>
+                </ol>
+            </section>
+
+            <!-- Código: Login Button -->
+            <section>
+                <h2>💻 Botón de Login</h2>
+                <pre><code class="typescript">// src/app/page.tsx
+const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
+const url = new URL(backendUrl + "/api/connect/github");
+
+&lt;Link href={url.href}&gt;
+  Sign in with GitHub
+&lt;/Link&gt;</code></pre>
+                <p class="small">Redirigimos a Strapi, no directamente a GitHub</p>
+            </section>
+
+            <!-- Código: Route Handler -->
+            <section>
+                <h2>💻 Route Handler</h2>
+                <pre><code class="typescript">// src/app/connect/[provider]/redirect/route.ts
+export async function GET(request, { params }) {
+  const token = searchParams.get("access_token");
+  
+  // Intercambiar por JWT de Strapi
+  const res = await fetch(
+    `${backendUrl}/api/auth/${provider}/callback?access_token=${token}`
+  );
+  const data = await res.json();
+  
+  // Guardar en cookie segura
+  cookieStore.set("jwt", data.jwt, config);
+  
+  return NextResponse.redirect("/dashboard");
+}</code></pre>
+            </section>
+
+            <!-- Seguridad: Cookies -->
+            <section>
+                <h2>🛡️ Cookies Seguras</h2>
+                <pre><code class="typescript">const config = {
+  maxAge: 60 * 60 * 24 * 7,  // 1 semana
+  httpOnly: true,             // No JS access
+  secure: true,               // Solo HTTPS
+  path: "/",
+  domain: "localhost"
+};</code></pre>
+                <p class="small"><code>httpOnly</code> previene robo de tokens vía XSS</p>
+            </section>
+
+            <!-- Middleware -->
+            <section>
+                <h2>🚧 Middleware de Protección</h2>
+                <pre><code class="typescript">// src/middleware.ts
+export async function middleware(request) {
+  const user = await getUserMeLoader();
+  
+  if (request.nextUrl.pathname.startsWith("/dashboard") 
+      && user.ok === false) {
+    return NextResponse.redirect("/");
+  }
+  
+  return NextResponse.next();
+}</code></pre>
+            </section>
+
+            <!-- Por qué verificar con Strapi -->
+            <section>
+                <h2>❓ ¿Por qué verificar con Strapi?</h2>
+                <p>La cookie podría existir pero...</p>
+                <ul>
+                    <li>El token expiró en el servidor</li>
+                    <li>El usuario fue deshabilitado</li>
+                    <li>El token fue revocado</li>
+                </ul>
+                <p class="highlight">Strapi es la fuente de verdad</p>
+            </section>
+
+            <!-- Server Actions -->
+            <section>
+                <h2>⚡ Server Actions para Logout</h2>
+                <pre><code class="typescript">async function logoutAction() {
+  "use server";
+  
+  const cookieStore = await cookies();
+  cookieStore.set("jwt", "", { ...config, maxAge: 0 });
+  
+  redirect("/");
+}</code></pre>
+                <p class="small">Sin API routes adicionales</p>
+            </section>
+
+            <!-- Configuración Strapi -->
+            <section>
+                <h2>⚙️ Configuración Strapi</h2>
+                <ol>
+                    <li>Admin → Settings → Providers</li>
+                    <li>Habilitar GitHub</li>
+                    <li>Client ID + Client Secret</li>
+                    <li>Redirect URL del frontend</li>
+                </ol>
+                <pre><code>Redirect: http://localhost:3000/connect/github/redirect</code></pre>
+            </section>
+
+            <!-- GitHub OAuth App -->
+            <section>
+                <h2>🐙 GitHub OAuth App</h2>
+                <p>Settings → Developer Settings → OAuth Apps</p>
+                <ul>
+                    <li><strong>Homepage:</strong> http://localhost:3000</li>
+                    <li><strong>Callback:</strong> http://localhost:1337/api/connect/github/callback</li>
+                </ul>
+                <p class="small">El callback apunta a Strapi, no al frontend</p>
+            </section>
+
+            <!-- Extensibilidad -->
+            <section>
+                <h2>🔌 Extensibilidad</h2>
+                <p>El segmento dinámico <code>[provider]</code> permite:</p>
+                <ul>
+                    <li>/connect/<span class="highlight">google</span>/redirect</li>
+                    <li>/connect/<span class="highlight">twitter</span>/redirect</li>
+                    <li>/connect/<span class="highlight">discord</span>/redirect</li>
+                </ul>
+                <p class="small">Solo configura el provider en Strapi</p>
+            </section>
+
+            <!-- Mejores prácticas -->
+            <section>
+                <h2>✅ Mejores Prácticas</h2>
+                <ul>
+                    <li>Nunca exponer Client Secret en frontend</li>
+                    <li>HTTPS obligatorio en producción</li>
+                    <li>No cachear datos de autenticación</li>
+                    <li>Implementar rate limiting</li>
+                    <li>Manejar errores gracefully</li>
+                </ul>
+            </section>
+
+            <!-- Estructura del proyecto -->
+            <section>
+                <h2>📁 Estructura</h2>
+                <pre><code>frontend/src/
+├── app/
+│   ├── page.tsx           # Login
+│   ├── dashboard/         # Protected
+│   └── connect/[provider]/redirect/
+├── components/
+│   └── LogoutButton.tsx
+├── services/
+│   └── user-me-loader.ts
+└── middleware.ts</code></pre>
+            </section>
+
+            <!-- Demo -->
+            <section class="center">
+                <h2>🎬 Demo Time</h2>
+                <p>Frontend: <code>http://localhost:3000</code></p>
+                <p>Backend: <code>http://localhost:1337</code></p>
+            </section>
+
+            <!-- Recursos -->
+            <section>
+                <h2>📚 Recursos</h2>
+                <ul>
+                    <li>Strapi Providers Docs</li>
+                    <li>Next.js Route Handlers</li>
+                    <li>GitHub OAuth Documentation</li>
+                    <li>OAuth 2.0 RFC 6749</li>
+                </ul>
+            </section>
+
+            <!-- Final -->
+            <section class="center">
+                <h1>🙏 ¡Gracias!</h1>
+                <p>¿Preguntas?</p>
+                <br>
+                <p class="small">github.com/tu-usuario/social-strapi</p>
+            </section>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/reveal.js@4.6.1/dist/reveal.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/reveal.js@4.6.1/plugin/highlight/highlight.js"></script>
+    <script>
+        Reveal.initialize({
+            hash: true,
+            slideNumber: true,
+            plugins: [ RevealHighlight ],
+            transition: 'slide'
+        });
+    </script>
+</body>
+</html>
