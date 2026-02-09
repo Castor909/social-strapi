@@ -45,13 +45,13 @@ SERVER_URL=http://localhost:1337
 
 3. **Iniciar aplicaciones**
 
-**Importante**: Strapi 5 requiere Node.js 24.x. Si tienes Node 25+, usa nvm:
+**Importante**: Strapi 5 requiere Node.js 24.x. Si tienes Node 25+, necesitas cambiar de versión.
+
+**Opción A - Si usas bash/zsh:**
 ```bash
 nvm use 24
-```
 
-```bash
-# Terminal 1 - Backend (asegurar Node 24.x)
+# Terminal 1 - Backend
 cd backend
 npm run develop
 # Se iniciará en http://localhost:1337
@@ -61,6 +61,20 @@ cd frontend
 npm run dev
 # Se iniciará en http://localhost:3000 o 3001
 ```
+
+**Opción B - Si usas fish shell (o nvm no funciona en tu shell):**
+```bash
+# Terminal 1 - Backend
+bash -lc 'source ~/.nvm/nvm.sh && nvm use 24 && cd /home/castor909/repos/social-strapi/backend && npm run develop'
+# Se iniciará en http://localhost:1337
+
+# Terminal 2 - Frontend
+cd frontend
+npm run dev
+# Se iniciará en http://localhost:3000 o 3001
+```
+
+> **Nota**: La Opción B ejecuta el backend directamente en bash con Node 24, ideal para fish shell donde nvm puede no estar disponible por defecto.
 
 4. **Configurar GitHub OAuth**
 - Crear admin en Strapi: http://localhost:1337/admin
